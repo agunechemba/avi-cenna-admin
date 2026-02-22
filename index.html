@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard | Avi-Cenna</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .admin-wrapper { max-width: 900px; margin: 40px auto; padding: 20px; font-family: 'Segoe UI', sans-serif; }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); margin-bottom: 30px; }
+        .hidden { display: none !important; }
+        input, textarea, select { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        .btn { background: #003366; color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.3s; }
+        .btn:disabled { background: #ccc; cursor: not-allowed; }
+        .btn-red { background: #d9534f; margin-top: 10px; }
+        .post-item { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid #eee; }
+        .status-msg { padding: 10px; border-radius: 6px; margin-bottom: 15px; text-align: center; display: none; background: #e7f3ff; color: #003366; }
+    </style>
+</head>
+<body style="background: #f4f7f9;">
+
+<div class="admin-wrapper">
+    <div id="login-section" class="card">
+        <h2>🔒 School Admin Login</h2>
+        <p style="font-size: 0.9rem; color: #666;">Please enter credentials.</p>
+        <input type="text" id="username" placeholder="Username">
+        <input type="password" id="password" placeholder="Password">
+        <button id="login-btn" class="btn" onclick="checkLogin()">Enter Dashboard</button>
+    </div>
+
+    <div id="dashboard-section" class="hidden">
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>📝 Create New Post</h2>
+                <p style="font-size: 0.9rem; color: #666; line-height: 1.5;">
+    <b>Formatting Tips:</b><br>
+    Use <code>&lt;b&gt;Text&lt;/b&gt;</code> for <b>Bold</b><br>
+    Use <code>&lt;i&gt;Text&lt;/i&gt;</code> for <i>Italics</i><br>
+    </p>
+                <button class="btn btn-red" onclick="logout()" style="width: auto; padding: 8px 15px;">Logout</button>
+            </div>
+            <div id="status" class="status-msg"></div>
+            <form id="blog-form">
+                <input type="text" id="title" placeholder="Post Title" required>
+                <select id="category">
+                    <option value="News">General News</option>
+                    <option value="Events">School Events</option>
+                    <option value="Academics">Academic Update</option>
+                </select>
+                <input type="text" id="mediaLink" placeholder="Image URL (Direct Link)" required>
+                <textarea id="content" rows="6" placeholder="Write your content here..." required></textarea>
+                <button type="submit" id="submit-btn" class="btn">🚀 Publish to Website</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>📂 Manage Existing Posts</h2>
+            <div id="post-list">Loading posts...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 1. UPDATE THIS URL AFTER EVERY GAS DEPLOYMENT
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxhUskSqxQ2-OdyPjAi40xUghet77-69hBTo0XRozXT2zJ4hwgHZdpPUInnEiZdDzzoJg/exec";
+
+    /**
+     * AUTHENTICATION LOGIC
+     * Sends credentials to GAS. Only shows dashboard if GAS returns "Verified".
+     */
+    async function checkLogin() {
+        const user = document.getElementById('username').value;
+        const pass = document.getElementById('password').value;
+        const btn = document.getElementById('login-btn');
+
+        if (!user || !pass) {
+            alert("Please fill in both fields.");
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = "Checking Credentials...";
+
+        try {
+            const response = await fetch(SCRIPT_URL, {
+                method: 'POST',
+                mode: 'cors',
+                redirect: 'follow',
+                body: JSON.stringify({
+                    action: "verify",
+                    username: user,
+                    password: pass
+                })
+            });
+
+            const result = await response.text();
+
+            if (result.trim() === "Verified") {
+                // Save to local storage so they stay logged in during this session
+                localStorage.setItem('aviAdminUser', user);
+                localStorage.setItem('aviAdminPass', pass);
+                showDashboard();
+            } else {
+                alert("Access Denied: Incorrect Username or Password.");
+                btn.disabled = false;
+                btn.innerHTML = "Enter Dashboard";
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Connection Error: Check if GAS is deployed as 'Anyone'.");
+            btn.disabled = false;
+            btn.innerHTML = "Enter Dashboard";
+        }
+    }
+
+    function showDashboard() {
+        document.getElementById('login-section').classList.add('hidden');
+        document.getElementById('dashboard-section').classList.remove('hidden');
+        fetchPosts();
+    }
+
+    function logout() {
+        localStorage.clear();
+        location.reload();
+    }
+
+    /**
+     * POST MANAGEMENT LOGIC
+     */
+    async function fetchPosts() {
+        const list = document.getElementById('post-list');
+        try {
+            const res = await fetch(SCRIPT_URL);
+            const data = await res.json();
+            
+            if (data.length === 0) {
+                list.innerHTML = "No posts found in the database.";
+                return;
+            }
+
+            list.innerHTML = data.reverse().map(post => `
+                <div class="post-item">
+                    <div>
+                        <strong>${post.Title}</strong><br>
+                        <small>${post.Category} | ${new Date(post.Date).toLocaleDateString()}</small>
+                    </div>
+                    <button onclick="deletePost('${post.ID}')" style="color:red; cursor:pointer; border:none; background:none; font-weight:bold;">Delete</button>
+                </div>
+            `).join('');
+        } catch (err) {
+            list.innerHTML = "Error loading posts. Check console.";
+        }
+    }
+
+    // CREATE POST
+    document.getElementById('blog-form').onsubmit = async (e) => {
+        e.preventDefault();
+        const status = document.getElementById('status');
+        const sBtn = document.getElementById('submit-btn');
+        
+        status.style.display = 'block';
+        status.innerHTML = "Syncing...";
+        sBtn.disabled = true;
+
+        const payload = {
+            username: localStorage.getItem('aviAdminUser'),
+            password: localStorage.getItem('aviAdminPass'),
+            title: document.getElementById('title').value,
+            category: document.getElementById('category').value,
+            mediaLink: document.getElementById('mediaLink').value,
+            content: document.getElementById('content').value
+        };
+
+        try {
+            const res = await fetch(SCRIPT_URL, { method: 'POST', redirect: 'follow', body: JSON.stringify(payload) });
+            const result = await res.text();
+            status.innerHTML = result;
+            document.getElementById('blog-form').reset();
+            fetchPosts();
+        } catch (err) {
+            status.innerHTML = "Error publishing.";
+        } finally {
+            sBtn.disabled = false;
+        }
+    };
+
+    // DELETE POST
+    async function deletePost(id) {
+        if(!confirm("Permanently delete this post?")) return;
+        const payload = {
+            action: "delete",
+            id: id,
+            username: localStorage.getItem('aviAdminUser'),
+            password: localStorage.getItem('aviAdminPass')
+        };
+        const res = await fetch(SCRIPT_URL, { method: 'POST', redirect: 'follow', body: JSON.stringify(payload) });
+        alert(await res.text());
+        fetchPosts();
+    }
+
+    // SESSION CHECK: If user already logged in, skip login screen
+    if(localStorage.getItem('aviAdminUser') && localStorage.getItem('aviAdminPass')) {
+        showDashboard();
+    }
+</script>
+</body>
+</html>
